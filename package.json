@@ -1,0 +1,41 @@
+{
+  "name": "@litools/babylon-lite-viewer",
+  "version": "0.1.0",
+  "description": "Minimal canvas-based Babylon WebGPU model viewer.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "node ./scripts/clean-dist.mjs",
+    "prebuild": "npm run clean",
+    "build": "tsc -p tsconfig.json",
+    "docs": "typedoc",
+    "test": "vitest run",
+    "dev": "vite --host 0.0.0.0",
+    "demo": "npm run demo:basic-canvas",
+    "demo:basic-canvas": "vite --host 0.0.0.0 --open /examples/basic-canvas/"
+  },
+  "dependencies": {
+    "@babylonjs/lite": "1.4.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.9",
+    "jsdom": "^29.1.1",
+    "typedoc": "^0.28.19",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0",
+    "vitest": "^4.1.9"
+  }
+}
