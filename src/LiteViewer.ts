@@ -25,6 +25,13 @@ import type {
   ViewerState,
 } from "./types.js";
 
+/**
+ * Minimal Babylon Lite model viewer for a single canvas.
+ *
+ * The viewer owns a WebGPU engine, an active scene, and an ArcRotate camera. It
+ * loads one model scene at a time: loading a new model disposes the previous
+ * scene before creating the next one. Loaded models are framed automatically.
+ */
 export class LiteViewer {
   private engine?: EngineContext;
   private scene?: SceneContext;
@@ -40,6 +47,15 @@ export class LiteViewer {
     private readonly options: LiteViewerOptions = {},
   ) {}
 
+  /**
+   * Initializes the WebGPU engine, scene, light, and camera.
+   *
+   * If `options.source` is provided, the model is loaded before the promise
+   * resolves. Rendering starts automatically unless `options.autoStart` is false.
+   *
+   * @returns Handles for the initialized viewer, canvas, engine, scene, and camera.
+   * @throws If WebGPU is unavailable or Babylon Lite initialization fails.
+   */
   async initialize(): Promise<LiteViewerDetails> {
     if (this.state === "disposed") {
       throw new Error("Cannot initialize a disposed LiteViewer.");
@@ -56,12 +72,11 @@ export class LiteViewer {
 
       const engine = await createEngine(this.canvas);
       const scene = createSceneContext(engine);
-      const light = createHemisphericLight([0, 1, 0], 1);
 
       this.engine = engine;
       this.scene = scene;
 
-      addToScene(scene, light);
+      this.addDefaultLight(scene);
 
       this.state = "ready";
 
@@ -83,7 +98,7 @@ export class LiteViewer {
         this.sceneRegistered = true;
       }
 
-      if (this.options.autoStart) {
+      if (this.options.autoStart !== false) {
         this.start();
       }
 
@@ -96,6 +111,15 @@ export class LiteViewer {
     }
   }
 
+  /**
+   * Loads a glTF/GLB model from a URL, `Blob`, or `ArrayBuffer`.
+   *
+   * When another model is already loaded, the current scene is disposed and a
+   * fresh scene is created first. This keeps only one model active at a time.
+   * The loaded model is framed automatically before `onLoaded` runs.
+   *
+   * @param source - Remote URL, application-hosted URL, uploaded file `Blob`, or model `ArrayBuffer`.
+   */
   async loadModel(source: LiteViewerSource): Promise<void> {
     this.state = "loading";
 
@@ -111,7 +135,7 @@ export class LiteViewer {
       addToScene(scene, model);
 
       this.loadedModel = model;
-      this.createCameraForScene(scene);
+      this.frameModel();
 
       if (!this.sceneRegistered && this.engine) {
         await registerScene(scene);
@@ -127,14 +151,24 @@ export class LiteViewer {
     }
   }
 
+  /**
+   * Loads an environment texture into the active scene.
+   *
+   * The viewer uses a packaged BRDF LUT texture required by Babylon Lite's
+   * environment loader.
+   *
+   * @param source - Environment texture URL.
+   */
   async setEnvironment(source: string): Promise<void> {
     const scene = this.requireScene();
 
     try {
       const environmentUrl = resolveAssetUrl(source);
+      const { DEFAULT_BRDF_LUT_URL } = await import("./brdfLut.js");
       await loadEnvironment(scene, environmentUrl, {
-        brdfUrl: resolveSiblingUrl(environmentUrl, "environmentBRDFTexture.png"),
-        skipGround: true,
+        brdfUrl: DEFAULT_BRDF_LUT_URL,
+        skipSkybox: this.options.skipSkybox,
+        skipGround: this.options.skipGround ?? true,
       });
     } catch (error) {
       this.state = "error";
@@ -143,12 +177,11 @@ export class LiteViewer {
     }
   }
 
-  frameModel(): void {
-    if (!this.scene || !this.loadedModel) return;
-
-    this.createCameraForScene(this.scene);
-  }
-
+  /**
+   * Starts the Babylon Lite render loop.
+   *
+   * This is called automatically by {@link initialize} unless `autoStart` is false.
+   */
   start(): void {
     if (!this.engine || this.running || this.state === "disposed") return;
 
@@ -156,6 +189,9 @@ export class LiteViewer {
     this.running = true;
   }
 
+  /**
+   * Stops the Babylon Lite render loop.
+   */
   stop(): void {
     if (!this.engine || !this.running) return;
 
@@ -163,6 +199,11 @@ export class LiteViewer {
     this.running = false;
   }
 
+  /**
+   * Stops rendering and disposes the active scene and engine.
+   *
+   * A disposed viewer cannot be initialized again.
+   */
   dispose(): void {
     if (this.state === "disposed") return;
 
@@ -219,9 +260,15 @@ export class LiteViewer {
 
   private createScene(): SceneContext {
     const scene = createSceneContext(this.requireEngine());
-    addToScene(scene, createHemisphericLight([0, 1, 0], 1));
+    this.addDefaultLight(scene);
     this.scene = scene;
     return scene;
+  }
+
+  private addDefaultLight(scene: SceneContext): void {
+    if (this.options.light === false) return;
+
+    addToScene(scene, createHemisphericLight([0, 1, 0], 1));
   }
 
   private createCameraForScene(scene: SceneContext): void {
@@ -230,6 +277,12 @@ export class LiteViewer {
     camera.alpha += Math.PI;
     this.camera = camera;
     this.detachCameraControl = attachControl(camera, this.canvas, scene);
+  }
+
+  private frameModel(): void {
+    if (!this.scene || !this.loadedModel) return;
+
+    this.createCameraForScene(this.scene);
   }
 
   private disposeCurrentScene(): void {
@@ -245,17 +298,11 @@ export class LiteViewer {
     this.sceneRegistered = false;
     this.loadedModel = undefined;
   }
-
 }
 
 type NavigatorWithGpu = Navigator & {
   gpu?: unknown;
 };
-
-function resolveSiblingUrl(source: string, filename: string): string {
-  const lastSlash = source.lastIndexOf("/");
-  return lastSlash === -1 ? filename : `${source.slice(0, lastSlash + 1)}${filename}`;
-}
 
 function resolveAssetUrl(source: string): string {
   if (typeof document === "undefined") {

@@ -7,7 +7,8 @@ const model = document.querySelector("#model") as HTMLSelectElement;
 const load = document.querySelector("#load") as HTMLButtonElement;
 const file = document.querySelector("#file") as HTMLInputElement;
 const upload = document.querySelector("#upload") as HTMLButtonElement;
-const frame = document.querySelector("#frame") as HTMLButtonElement;
+const environment = document.querySelector("#environment") as HTMLInputElement;
+const loadEnvironment = document.querySelector("#load-environment") as HTMLButtonElement;
 
 function setLoading(message: string) {
   loading.hidden = false;
@@ -25,15 +26,11 @@ setLoading("Loading...");
 
 const details = await createLiteViewerForCanvas(canvas, {
   source: model.value,
-  autoStart: true,
+  environment: environment.value,
   onLoaded: () => {
     loading.hidden = true;
   },
   onError: showError,
-});
-
-frame.addEventListener("click", () => {
-  details.viewer.frameModel();
 });
 
 load.addEventListener("click", async () => {
@@ -50,12 +47,23 @@ upload.addEventListener("click", () => {
   file.click();
 });
 
+loadEnvironment.addEventListener("click", async () => {
+  try {
+    setLoading("Loading environment...");
+    await details.viewer.setEnvironment(environment.value);
+    loading.hidden = true;
+  } catch (err) {
+    showError(err);
+  }
+});
+
 file.addEventListener("change", async () => {
   const selectedFile = file.files?.[0];
   if (!selectedFile) return;
 
   try {
     setLoading(`Loading ${selectedFile.name}...`);
+
     await details.viewer.loadModel(selectedFile);
     loading.hidden = true;
     file.value = "";

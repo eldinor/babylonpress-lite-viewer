@@ -51,11 +51,14 @@ body {
 .toolbar {
   bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  max-width: calc(100vw - 32px);
   padding: 8px;
 }
 
 button,
+input,
 select {
   min-height: 36px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -72,5 +75,11 @@ button {
 
 select {
   max-width: 240px;
+  padding: 0 8px;
+}
+
+input[type="url"] {
+  width: min(420px, 34vw);
+  min-width: 220px;
   padding: 0 8px;
 }
