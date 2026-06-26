@@ -1,4 +1,10 @@
-import type { ArcRotateCamera, EngineContext, SceneContext } from "@babylonjs/lite";
+import type {
+  AnimationGroup,
+  ArcRotateCamera,
+  EngineContext,
+  SceneContext,
+  Screenshot,
+} from "@babylonjs/lite";
 import type { LiteViewer } from "./LiteViewer.js";
 
 /**
@@ -31,6 +37,16 @@ export type LiteViewerClearColor = {
 export type LiteViewerAlphaMode = "opaque" | "premultiplied";
 
 /**
+ * Animation group loaded with the active model.
+ */
+export type LiteViewerAnimationGroup = AnimationGroup;
+
+/**
+ * Screenshot captured from the viewer canvas.
+ */
+export type LiteViewerScreenshot = Screenshot;
+
+/**
  * Startup and lifecycle options for {@link LiteViewer}.
  */
 export type LiteViewerOptions = {
@@ -57,6 +73,13 @@ export type LiteViewerOptions = {
    * Defaults to `"opaque"`.
    */
   alphaMode?: LiteViewerAlphaMode;
+
+  /**
+   * Controls whether loaded glTF animation groups start automatically.
+   *
+   * Defaults to `true`.
+   */
+  autoPlayAnimations?: boolean;
 
   /**
    * Controls whether the render loop starts automatically after initialization.

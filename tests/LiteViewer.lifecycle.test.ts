@@ -4,9 +4,13 @@ const createEngine = vi.fn();
 const createSceneContext = vi.fn();
 const createDefaultCamera = vi.fn();
 const createHemisphericLight = vi.fn();
+const captureScreenshot = vi.fn();
 const attachControl = vi.fn();
 const registerScene = vi.fn();
 const loadGltf = vi.fn();
+const pauseAnimation = vi.fn();
+const playAnimation = vi.fn();
+const stopAnimation = vi.fn();
 const addToScene = vi.fn();
 const startEngine = vi.fn();
 const stopEngine = vi.fn();
@@ -16,6 +20,7 @@ const disposeEngine = vi.fn();
 vi.mock("@babylonjs/lite", () => ({
   addToScene,
   attachControl,
+  captureScreenshot,
   createDefaultCamera,
   createEngine,
   createHemisphericLight,
@@ -23,9 +28,12 @@ vi.mock("@babylonjs/lite", () => ({
   disposeEngine,
   disposeScene,
   loadGltf,
+  pauseAnimation,
+  playAnimation,
   registerScene,
   startEngine,
   stopEngine,
+  stopAnimation,
 }));
 
 describe("LiteViewer lifecycle", () => {
@@ -35,9 +43,13 @@ describe("LiteViewer lifecycle", () => {
     createSceneContext.mockReset();
     createDefaultCamera.mockReset();
     createHemisphericLight.mockReset();
+    captureScreenshot.mockReset();
     attachControl.mockReset();
     registerScene.mockReset();
     loadGltf.mockReset();
+    pauseAnimation.mockReset();
+    playAnimation.mockReset();
+    stopAnimation.mockReset();
     addToScene.mockClear();
     startEngine.mockClear();
     stopEngine.mockClear();
@@ -59,6 +71,11 @@ describe("LiteViewer lifecycle", () => {
       beta: 1,
     });
     createHemisphericLight.mockReturnValue({ lightType: "hemispheric" });
+    captureScreenshot.mockResolvedValue({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([0, 0, 0, 255]),
+    });
     attachControl.mockReturnValue(vi.fn());
     registerScene.mockResolvedValue(undefined);
 
@@ -130,6 +147,18 @@ describe("LiteViewer lifecycle", () => {
     expect(startEngine).not.toHaveBeenCalled();
   });
 
+  it("can capture a screenshot", async () => {
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"));
+
+    const details = await viewer.initialize();
+    const shot = await viewer.captureScreenshot();
+
+    expect(captureScreenshot).toHaveBeenCalledWith(details.engine);
+    expect(shot.width).toBe(1);
+    expect(shot.height).toBe(1);
+  });
+
   it("loadModel can be called", async () => {
     const model = {
       entities: [createMesh()],
@@ -150,6 +179,120 @@ describe("LiteViewer lifecycle", () => {
     expect(createDefaultCamera).toHaveBeenCalledTimes(2);
     expect(createHemisphericLight).toHaveBeenCalledTimes(2);
     expect(viewer.getState()).toBe("loaded");
+  });
+
+  it("exposes loaded animation groups", async () => {
+    const animationGroups = [createAnimationGroup("Idle")];
+    loadGltf.mockResolvedValueOnce({
+      entities: [createMesh()],
+      animationGroups,
+    });
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"));
+
+    await viewer.initialize();
+    await viewer.loadModel("/models/box.glb");
+
+    expect(viewer.getAnimationGroups()).toBe(animationGroups);
+  });
+
+  it("can disable animation autoplay on load", async () => {
+    const animationGroups = [
+      createAnimationGroup("Idle"),
+      createAnimationGroup("Run"),
+    ];
+    loadGltf.mockResolvedValueOnce({
+      entities: [createMesh()],
+      animationGroups,
+    });
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"), {
+      autoPlayAnimations: false,
+    });
+
+    await viewer.initialize();
+    await viewer.loadModel("/models/box.glb");
+
+    expect(stopAnimation).toHaveBeenCalledWith(animationGroups[0]);
+    expect(stopAnimation).toHaveBeenCalledWith(animationGroups[1]);
+  });
+
+  it("can play an animation group by name", async () => {
+    const animationGroups = [
+      createAnimationGroup("Idle"),
+      createAnimationGroup("Run"),
+    ];
+    loadGltf.mockResolvedValueOnce({
+      entities: [createMesh()],
+      animationGroups,
+    });
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"));
+
+    await viewer.initialize();
+    await viewer.loadModel("/models/box.glb");
+    const played = viewer.playAnimationGroup("Run");
+
+    expect(played).toBe(animationGroups[1]);
+    expect(stopAnimation).toHaveBeenCalledWith(animationGroups[0]);
+    expect(stopAnimation).not.toHaveBeenCalledWith(animationGroups[1]);
+    expect(playAnimation).toHaveBeenCalledWith(animationGroups[1]);
+  });
+
+  it("can stop loaded animation groups", async () => {
+    const animationGroups = [
+      createAnimationGroup("Idle"),
+      createAnimationGroup("Run"),
+    ];
+    loadGltf.mockResolvedValueOnce({
+      entities: [createMesh()],
+      animationGroups,
+    });
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"));
+
+    await viewer.initialize();
+    await viewer.loadModel("/models/box.glb");
+    viewer.stopAnimations();
+
+    expect(stopAnimation).toHaveBeenCalledWith(animationGroups[0]);
+    expect(stopAnimation).toHaveBeenCalledWith(animationGroups[1]);
+  });
+
+  it("can pause loaded animation groups", async () => {
+    const animationGroups = [
+      createAnimationGroup("Idle"),
+      createAnimationGroup("Run"),
+    ];
+    loadGltf.mockResolvedValueOnce({
+      entities: [createMesh()],
+      animationGroups,
+    });
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"));
+
+    await viewer.initialize();
+    await viewer.loadModel("/models/box.glb");
+    animationGroups[0]._ctrl.time = 0.42;
+    viewer.pauseAnimations();
+
+    expect(pauseAnimation).toHaveBeenCalledWith(animationGroups[0]);
+    expect(pauseAnimation).toHaveBeenCalledWith(animationGroups[1]);
+    expect(animationGroups[0]._ctrl.playing).toBe(false);
+    expect(animationGroups[1]._ctrl.playing).toBe(false);
+    expect(animationGroups[0]._ctrl.time).toBe(0.42);
+    expect(animationGroups[0].currentTime).toBe(0.42);
+  });
+
+  it("throws when playing a missing animation group", async () => {
+    const { LiteViewer } = await import("../src/LiteViewer.js");
+    const viewer = new LiteViewer(document.createElement("canvas"));
+
+    await viewer.initialize();
+
+    expect(() => viewer.playAnimationGroup("Missing")).toThrow(
+      'Animation group "Missing" was not found.',
+    );
   });
 
   it("applies clearColor when provided", async () => {
@@ -248,5 +391,19 @@ function createMesh() {
     material: {},
     boundMin: [-1, -1, -1],
     boundMax: [1, 1, 1],
+  };
+}
+
+function createAnimationGroup(name: string) {
+  return {
+    name,
+    duration: 1,
+    frameRate: 60,
+    isPlaying: name === "Idle",
+    currentTime: 0,
+    _ctrl: {
+      playing: name === "Idle",
+      time: 0,
+    },
   };
 }

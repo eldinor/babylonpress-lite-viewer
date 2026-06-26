@@ -105,12 +105,16 @@ type LiteViewerOptions = {
   lightIntensity?: number;
   clearColor?: LiteViewerClearColor;
   alphaMode?: "opaque" | "premultiplied";
+  autoPlayAnimations?: boolean;
   autoStart?: boolean;
   onInitialized?: (details: LiteViewerDetails) => void;
   onLoaded?: (details: LiteViewerDetails) => void;
   onError?: (error: unknown) => void;
 };
 ```
+
+Animation groups returned by `getAnimationGroups()` use the exported
+`LiteViewerAnimationGroup` type.
 
 ### `source`
 
@@ -139,6 +143,10 @@ details.viewer.setClearColor({ r: 0.1, g: 0.1, b: 0.12, a: 1 });
 ### `alphaMode`
 
 Canvas alpha compositing mode. Defaults to `"opaque"`.
+
+### `autoPlayAnimations`
+
+Controls whether loaded glTF animation groups start automatically. Defaults to `true`. Set it to `false` to stop all animation groups after a model is loaded.
 
 ### `autoStart`
 
@@ -170,6 +178,11 @@ Methods:
 
 - `initialize()` initializes WebGPU, the engine, scene, light, and camera.
 - `loadModel(source)` loads a URL, `Blob`, or `ArrayBuffer` and frames the model automatically.
+- `getAnimationGroups()` returns animation groups loaded with the active model.
+- `playAnimationGroup(name)` stops other groups and starts the named animation group.
+- `pauseAnimations()` pauses all animation groups loaded with the active model.
+- `stopAnimations()` stops all animation groups loaded with the active model.
+- `captureScreenshot()` captures the current viewer canvas.
 - `getState()` returns the current viewer lifecycle state.
 - `setClearColor(color)` updates the active scene clear color.
 - `start()` starts rendering.
@@ -216,7 +229,9 @@ npm pack --dry-run
 
 ## Demo
 
-The basic canvas demo is in `examples/basic-canvas`. It loads the Babylon BoomBox sample by default. It also includes local sample models and a GLB upload button.
+The basic canvas demo is in `examples/basic-canvas`. It loads BoomBox by default and includes two more remote samples plus a GLB upload button.
+
+Screenshot capture uses Babylon Lite's canvas readback. Saved screenshots are opaque; transparent canvas alpha is not preserved in the image data.
 
 ```sh
 npm run demo:basic-canvas

@@ -1,6 +1,7 @@
 import {
   addToScene,
   attachControl,
+  captureScreenshot,
   createDefaultCamera,
   createEngine,
   createHemisphericLight,
@@ -8,9 +9,12 @@ import {
   disposeEngine,
   disposeScene,
   loadGltf,
+  pauseAnimation,
+  playAnimation as playBabylonAnimation,
   registerScene,
   startEngine,
   stopEngine,
+  stopAnimation,
   type ArcRotateCamera,
   type AssetContainer,
   type EngineContext,
@@ -18,9 +22,11 @@ import {
 } from "@babylonjs/lite";
 import { DEFAULT_CLEAR_COLOR, WEBGPU_REQUIRED_MESSAGE } from "./defaults.js";
 import type {
+  LiteViewerAnimationGroup,
   LiteViewerClearColor,
   LiteViewerDetails,
   LiteViewerOptions,
+  LiteViewerScreenshot,
   LiteViewerSource,
   ViewerState,
 } from "./types.js";
@@ -31,11 +37,14 @@ import type {
  * The viewer owns a WebGPU engine, an active scene, and an ArcRotate camera. It
  * loads one model scene at a time: loading a new model disposes the previous
  * scene before creating the next one. Loaded models are framed automatically.
+ * No enviironment settings to keep everything minimal as possible.
+ * One default light with controlled intensity. ClearColor with alpha channel (use alphaMode: "premultiplied" for transparency).
  */
 export class LiteViewer {
   private engine?: EngineContext;
   private scene?: SceneContext;
   private camera?: ArcRotateCamera;
+  private animationGroups: LiteViewerAnimationGroup[] = [];
   private state: ViewerState = "idle";
   private running = false;
   private detachCameraControl?: () => void;
@@ -130,6 +139,11 @@ export class LiteViewer {
       const model = await loadLiteViewerSource(this.requireEngine(), source);
       addToScene(scene, model);
 
+      this.animationGroups = model.animationGroups ?? [];
+      if (this.options.autoPlayAnimations === false) {
+        this.stopAnimationGroups();
+      }
+
       this.createCameraForScene(scene);
 
       if (!this.sceneRegistered && this.engine) {
@@ -151,6 +165,61 @@ export class LiteViewer {
    */
   getState(): ViewerState {
     return this.state;
+  }
+
+  /**
+   * Returns animation groups loaded with the active model.
+   */
+  getAnimationGroups(): readonly LiteViewerAnimationGroup[] {
+    return this.animationGroups;
+  }
+
+  /**
+   * Stops other loaded animation groups and starts the group with `name`.
+   *
+   * @throws If no animation group with `name` exists on the active model.
+   */
+  playAnimationGroup(name: string): LiteViewerAnimationGroup {
+    const group = this.animationGroups.find(
+      (animation) => animation.name === name,
+    );
+    if (!group) {
+      throw new Error(`Animation group "${name}" was not found.`);
+    }
+
+    this.stopAnimationGroups(group);
+    playBabylonAnimation(group);
+    group.isPlaying = true;
+    syncAnimationControllerPlayback(group);
+    return group;
+  }
+
+  /**
+   * Pauses all animation groups loaded with the active model.
+   */
+  pauseAnimations(): void {
+    for (const group of this.animationGroups) {
+      pauseAnimation(group);
+      group.isPlaying = false;
+      pauseAnimationController(group);
+    }
+  }
+
+  /**
+   * Stops all animation groups loaded with the active model.
+   */
+  stopAnimations(): void {
+    this.stopAnimationGroups();
+  }
+
+  /**
+   * Captures the current viewer canvas.
+   *
+   * The screenshot data is opaque; Babylon Lite forces alpha to 255 when
+   * reading back the presented canvas.
+   */
+  captureScreenshot(): Promise<LiteViewerScreenshot> {
+    return captureScreenshot(this.requireEngine());
   }
 
   /**
@@ -271,10 +340,7 @@ export class LiteViewer {
   }
 
   private addDefaultLight(scene: SceneContext): void {
-    addToScene(
-      scene,
-      createHemisphericLight([0, 1, 0], this.options.lightIntensity ?? 1),
-    );
+    addToScene(scene, createHemisphericLight([0, 1, 0], this.options.lightIntensity ?? 1));
   }
 
   private createCameraForScene(scene: SceneContext): void {
@@ -296,14 +362,46 @@ export class LiteViewer {
     this.scene = undefined;
     this.camera = undefined;
     this.sceneRegistered = false;
+    this.animationGroups = [];
   }
+
+  private stopAnimationGroups(except?: LiteViewerAnimationGroup): void {
+    for (const group of this.animationGroups) {
+      if (group === except) continue;
+
+      stopAnimation(group);
+      group.isPlaying = false;
+      group.currentTime = 0;
+      syncAnimationControllerPlayback(group);
+    }
+  }
+}
+
+type AnimationGroupWithController = LiteViewerAnimationGroup & {
+  _ctrl?: {
+    playing?: boolean;
+    time?: number;
+  };
+};
+
+function pauseAnimationController(group: LiteViewerAnimationGroup): void {
+  const internalGroup = group as AnimationGroupWithController;
+  if (!internalGroup._ctrl) return;
+
+  group.currentTime = internalGroup._ctrl.time ?? group.currentTime;
+  internalGroup._ctrl.playing = group.isPlaying;
+}
+
+function syncAnimationControllerPlayback(group: LiteViewerAnimationGroup): void {
+  const internalGroup = group as AnimationGroupWithController;
+  if (!internalGroup._ctrl) return;
+
+  internalGroup._ctrl.playing = group.isPlaying;
+  internalGroup._ctrl.time = group.currentTime;
 }
 
 type NavigatorWithGpu = Navigator & {
   gpu?: unknown;
 };
 
-const loadLiteViewerSource = loadGltf as (
-  engine: EngineContext,
-  source: LiteViewerSource,
-) => Promise<AssetContainer>;
+const loadLiteViewerSource = loadGltf as (engine: EngineContext, source: LiteViewerSource) => Promise<AssetContainer>;
