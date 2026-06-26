@@ -46,6 +46,7 @@
     "docs": "typedoc",
     "typedoc": "typedoc",
     "test": "vitest run",
+    "test:package": "node ./scripts/test-package-consumption.mjs",
     "dev": "vite --host 0.0.0.0",
     "demo": "npm run demo:basic-canvas",
     "demo:basic-canvas": "vite --host 0.0.0.0 --open /examples/basic-canvas/"
