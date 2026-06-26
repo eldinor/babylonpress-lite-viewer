@@ -180,9 +180,7 @@ export class LiteViewer {
    * @throws If no animation group with `name` exists on the active model.
    */
   playAnimationGroup(name: string): LiteViewerAnimationGroup {
-    const group = this.animationGroups.find(
-      (animation) => animation.name === name,
-    );
+    const group = this.animationGroups.find((animation) => animation.name === name);
     if (!group) {
       throw new Error(`Animation group "${name}" was not found.`);
     }
@@ -403,5 +401,7 @@ function syncAnimationControllerPlayback(group: LiteViewerAnimationGroup): void 
 type NavigatorWithGpu = Navigator & {
   gpu?: unknown;
 };
-
+// to ensure proper TS casting
+// loadGltf overloads cover every LiteViewerSource variant,
+// but TypeScript cannot match the union directly against the overload list.
 const loadLiteViewerSource = loadGltf as (engine: EngineContext, source: LiteViewerSource) => Promise<AssetContainer>;
