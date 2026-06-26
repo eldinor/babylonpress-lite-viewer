@@ -24,7 +24,7 @@ setLoading("Loading...");
 
 const details = await createLiteViewerForCanvas(canvas, {
   source: model.value,
-  clearColor: { r: 0.02, g: 0.02, b: 0.5, a: 0.2 },
+  clearColor: { r: 0.02, g: 0.02, b: 0.3, a: 0.2 },
   alphaMode: "premultiplied",
   onLoaded: () => {
     loading.hidden = true;
